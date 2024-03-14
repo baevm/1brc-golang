@@ -54,7 +54,7 @@ func worker(jobs <-chan string, result *Map[string, Stats]) {
 	}
 }
 
-func main() {
+func main1() {
 	/* PROFILING */
 	profCpu, err := os.Create("./perf/cpu.pprof")
 	if err != nil {
