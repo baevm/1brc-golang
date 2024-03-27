@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -81,7 +82,7 @@ func main() {
 	// var linesCount atomic.Uint64
 	result := NewMap[string, *Stats]()
 
-	workerCount := 5
+	workerCount := runtime.NumCPU() - 1
 	jobs := make(chan []string, workerCount)
 
 	// Start workers
