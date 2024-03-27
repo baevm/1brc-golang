@@ -2,6 +2,9 @@ module 1brc-golang
 
 go 1.21.0
 
-require github.com/edsrzf/mmap-go v1.1.0
+require github.com/dolthub/swiss v0.2.1
 
-require golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
+require (
+	github.com/dolthub/maphash v0.1.0 // indirect
+	github.com/valyala/fastjson v1.6.4 // indirect
+)

@@ -1,30 +1,28 @@
 package main
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/dolthub/swiss"
+)
 
 type Map[K comparable, V any] struct {
 	mu sync.Mutex
-	m  map[K]V
+	m  *swiss.Map[K, V]
 }
 
 func NewMap[K comparable, V any]() Map[K, V] {
 	return Map[K, V]{
 		mu: sync.Mutex{},
-		m:  make(map[K]V),
+		m:  swiss.NewMap[K, V](413),
 	}
-}
-
-func (m *Map[K, V]) Delete(key K) {
-	m.mu.Lock()
-	delete(m.m, key)
-	m.mu.Unlock()
 }
 
 func (m *Map[K, V]) Get(key K) (value V, ok bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	v, ok := m.m[key]
+	v, ok := m.m.Get(key)
 
 	if !ok {
 		return value, ok
@@ -35,18 +33,19 @@ func (m *Map[K, V]) Get(key K) (value V, ok bool) {
 
 func (m *Map[K, V]) Range(f func(key K, value V) bool) {
 	m.mu.Lock()
-	for k, v := range m.m {
-		f(k, v)
-	}
+	// for k, v := range m.m {
+	// 	f(k, v)
+	// }
+	m.m.Iter(f)
 	m.mu.Unlock()
 }
 
 func (m *Map[K, V]) Set(key K, value V) {
 	m.mu.Lock()
-	m.m[key] = value
+	m.m.Put(key, value)
 	m.mu.Unlock()
 }
 
 func (m *Map[K, V]) Size() int {
-	return len(m.m)
+	return m.m.Count()
 }

@@ -3,16 +3,13 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"runtime"
-	"runtime/pprof"
 	"slices"
-	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
+
+	"github.com/valyala/fastjson/fastfloat"
 )
 
 type Stats struct {
@@ -25,49 +22,52 @@ type Stats struct {
 
 var separator = ";"
 
-func worker(jobs <-chan string, result *Map[string, Stats]) {
-	for line := range jobs {
-		cityTemp := strings.Split(line, separator)
-		city := string(cityTemp[0])
+func worker(jobs <-chan []string, result *Map[string, *Stats]) {
+	for chunk := range jobs {
+		for _, line := range chunk {
 
-		temp, _ := strconv.ParseFloat(cityTemp[1], 64)
+			cityTemp := strings.Split(line, separator)
+			city := cityTemp[0]
 
-		if prevVal, isOk := result.Get(city); isOk {
-			if prevVal.min > temp {
-				prevVal.min = temp
-			} else if prevVal.max < temp {
-				prevVal.max = temp
+			temp := fastfloat.ParseBestEffort(cityTemp[1])
+
+			prevVal, isOk := result.Get(city)
+
+			if isOk {
+				prevVal.min = min(prevVal.min, temp)
+				prevVal.max = max(prevVal.max, temp)
+				prevVal.count += 1
+				prevVal.sum += temp
+
+			} else {
+				result.Set(city, &Stats{
+					min:   temp,
+					max:   temp,
+					count: 1,
+					sum:   temp,
+				})
 			}
-
-			prevVal.count += 1
-			prevVal.sum += temp
-
-			result.Set(city, prevVal)
-		} else {
-			result.Set(city, Stats{
-				min:   temp,
-				max:   temp,
-				count: 1,
-				sum:   temp,
-			})
 		}
+
 	}
 }
 
-func main1() {
+// check first 5kk lines and get all cities
+// then start parsing min maxing all
+func main() {
 	/* PROFILING */
-	profCpu, err := os.Create("./perf/cpu.pprof")
-	if err != nil {
-		panic(err)
-	}
-	pprof.StartCPUProfile(profCpu)
-	defer pprof.StopCPUProfile()
-	profMem, err := os.Create("./perf/mem.pprof")
-	if err != nil {
-		panic(err)
-	}
-	pprof.WriteHeapProfile(profMem)
-	profMem.Close()
+	// profCpu, err := os.Create("./perf/cpu.pprof")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// pprof.StartCPUProfile(profCpu)
+	// defer pprof.StopCPUProfile()
+	// profMem, err := os.Create("./perf/mem.pprof")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// pprof.WriteHeapProfile(profMem)
+	// profMem.Close()
 	/* PROFILING */
 
 	f, err := os.Open("./measurements.txt")
@@ -78,11 +78,11 @@ func main1() {
 
 	defer f.Close()
 
-	var linesCount atomic.Uint64
-	result := NewMap[string, Stats]()
+	// var linesCount atomic.Uint64
+	result := NewMap[string, *Stats]()
 
-	workerCount := runtime.NumCPU() * 2
-	jobs := make(chan string, workerCount)
+	workerCount := 5
+	jobs := make(chan []string, workerCount)
 
 	// Start workers
 	fmt.Printf("Starting with %d workers...\n", workerCount)
@@ -91,6 +91,7 @@ func main1() {
 	}
 
 	reader := bufio.NewScanner(bufio.NewReader(f))
+	lineChunks := make([]string, 0, 10000)
 
 	startTime := time.Now()
 
@@ -98,21 +99,26 @@ func main1() {
 	for reader.Scan() {
 		line := reader.Text()
 
-		if err != nil {
-			if err == io.EOF {
-				break
-			} else {
-				log.Fatalln(err)
-			}
+		if len(lineChunks) < 10000 {
+			lineChunks = append(lineChunks, line)
+		} else {
+			jobs <- lineChunks
+			lineChunks = make([]string, 0, 10000)
 		}
 
-		jobs <- line
+		// if err != nil {
+		// 	if err == io.EOF {
+		// 		break
+		// 	} else {
+		// 		log.Fatalln(err)
+		// 	}
+		// }
 
-		if linesCount.Load() >= 100_000_000 {
-			break
-		}
+		// if linesCount.Load() >= 100_000_000 {
+		// 	break
+		// }
 
-		linesCount.Add(1)
+		// linesCount.Add(1)
 	}
 
 	close(jobs)
@@ -129,9 +135,9 @@ func main1() {
 
 	sortedCities := make([]string, 0, result.Size())
 
-	result.Range(func(key string, value Stats) bool {
+	result.Range(func(key string, value *Stats) bool {
 		sortedCities = append(sortedCities, key)
-		return true
+		return false
 	})
 
 	slices.Sort(sortedCities)
